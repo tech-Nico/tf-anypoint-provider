@@ -2,23 +2,24 @@ package anypoint
 
 import "github.com/hashicorp/terraform/helper/schema"
 
-func resourceBusinessGroup() *schema.Resource{
+func resourceBusinessGroup() *schema.Resource {
 	return &schema.Resource{
 		Create: resourceBGCreate,
-		Read: resourceBGRead,
+		Read:   resourceBGRead,
 		Update: resourceBGUpdate,
 		Delete: resourceBGDelete,
+		Exists: resourceBGExists,
 
-		Schema: map[string] *schema.Schema{
-			"name" : &schema.Schema{
-				Type: schema.TypeString,
+		Schema: map[string]*schema.Schema{
+			"name": &schema.Schema{
+				Type:     schema.TypeString,
 				Required: true,
 			},
 		},
 	}
 }
 
-func resourceBGCreate(d *schema.ResourceData, m interface{}) error {
+func resourceBGCreate(d *schema.ResourceData, conf interface{}) error {
 	name := d.Get("name").(string)
 	//At this point I should create the BG (if it doesn't exist)
 	d.SetId(name)
@@ -26,14 +27,18 @@ func resourceBGCreate(d *schema.ResourceData, m interface{}) error {
 	return nil
 }
 
-func resourceBGRead(d *schema.ResourceData, m interface{}) error {
+func resourceBGRead(d *schema.ResourceData, conf interface{}) error {
 	return nil
 }
 
-func resourceBGDelete(d *schema.ResourceData, m interface{}) error {
+func resourceBGDelete(d *schema.ResourceData, conf interface{}) error {
 	return nil
 }
 
-func resourceBGUpdate(d *schema.ResourceData, m interface{}) error {
+func resourceBGUpdate(d *schema.ResourceData, conf interface{}) error {
+	return nil
+}
+
+func resourceBGExists(d *schema.ResourceData, conf interface{}) error {
 	return nil
 }

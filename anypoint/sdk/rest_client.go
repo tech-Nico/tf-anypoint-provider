@@ -11,17 +11,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package rest
+package sdk
 
 import (
-	"github.com/dghubble/sling"
-	"log"
-	"io/ioutil"
-	"net/http"
 	"crypto/tls"
-	"github.com/tech-nico/anypoint-cli/utils"
 	"fmt"
+	"github.com/dghubble/sling"
+	"github.com/tech-nico/anypoint-cli/utils"
 	"io"
+	"io/ioutil"
+	"log"
+	"net/http"
 	"net/http/httputil"
 )
 
@@ -35,7 +35,7 @@ type ContentType int
 var headers map[string]string = make(map[string]string, 0)
 
 const (
-	Application_Json            ContentType = iota
+	Application_Json ContentType = iota
 	Application_OctetStream
 	Application_Pdf
 	Application_Atom_Xml
@@ -67,11 +67,17 @@ type RestClient struct {
 	client *http.Client
 }
 
-func NewRestClient(uri string) (*RestClient) {
-	transCfg := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // ignore expired SSL certificates
+func NewRestClient(uri string, insecure bool) *RestClient {
+
+	client := &http.Client{}
+	if insecure {
+		transCfg := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // ignore expired SSL certificates
+		}
+
+		client.Transport = transCfg
 	}
-	client := &http.Client{Transport: transCfg}
+
 	s := sling.New().
 		Client(client).
 		Base(uri)
@@ -83,7 +89,7 @@ func NewRestClient(uri string) (*RestClient) {
 	}
 }
 
-func (client *RestClient) AddAuthHeader(token string) (*RestClient) {
+func (client *RestClient) AddAuthHeader(token string) *RestClient {
 	if headers["Authorization"] == "" {
 		client.Sling.Add("Authorization", "Bearer "+token)
 		headers["Authorization"] = token
@@ -91,7 +97,7 @@ func (client *RestClient) AddAuthHeader(token string) (*RestClient) {
 	return client
 }
 
-func (client *RestClient) AddOrgHeader(orgId string) (*RestClient) {
+func (client *RestClient) AddOrgHeader(orgId string) *RestClient {
 	if headers["X-ANYPNT-ORG-ID"] == "" {
 		client.Sling.Add("X-ANYPNT-ORG-ID", orgId)
 		headers["X-ANYPNT-ORG-ID"] = orgId
@@ -99,7 +105,7 @@ func (client *RestClient) AddOrgHeader(orgId string) (*RestClient) {
 	return client
 }
 
-func (client *RestClient) AddEnvHeader(envId string) (*RestClient) {
+func (client *RestClient) AddEnvHeader(envId string) *RestClient {
 	if headers["X-ANYPNT-ENV-ID"] == "" {
 		client.Sling.Add("X-ANYPNT-ENV-ID", envId)
 		headers["X-ANYPNT-ENV-ID"] = envId
@@ -107,7 +113,7 @@ func (client *RestClient) AddEnvHeader(envId string) (*RestClient) {
 	return client
 }
 
-func (client *RestClient) AddHeader(key, value string) (*RestClient) {
+func (client *RestClient) AddHeader(key, value string) *RestClient {
 	client.Sling.Add(key, value)
 	return client
 }
@@ -202,7 +208,6 @@ func (client *RestClient) DELETE(body interface{}, path string, cType ContentTyp
 	return response, httpErr
 }
 
-
 func setSlingBodyForContentType(cType ContentType, sling *sling.Sling, body interface{}) *sling.Sling {
 	if body != nil {
 		switch cType {
@@ -240,7 +245,7 @@ func validateResponse(response *http.Response, err error, method, path string) e
 	return nil
 }
 
-func logRequest(req *http.Request) (func()){
+func logRequest(req *http.Request) func() {
 	return func() {
 		log.Print("REQUEST DUMP")
 		dump, _ := httputil.DumpRequest(req, true)
@@ -248,7 +253,7 @@ func logRequest(req *http.Request) (func()){
 	}
 }
 
-func logResponse(method string, response *http.Response) (func()) {
+func logResponse(method string, response *http.Response) func() {
 	return func() {
 		log.Printf("RESPONSE")
 		dump, _ := httputil.DumpResponse(response, true)
