@@ -3,8 +3,6 @@ package anypoint
 import (
 	"fmt"
 	"github.com/hashicorp/terraform/helper/schema"
-	"github.com/tech-nico/terraform-provider-anypoint/anypoint/sdk"
-	"github.com/tech-nico/terraform-provider-anypoint/anypoint/sdk/rest"
 	"net/url"
 )
 
@@ -24,6 +22,7 @@ func Provider() *schema.Provider {
 			},
 			"password": &schema.Schema{
 				Type:        schema.TypeString,
+				Sensitive:   true,
 				Optional:    false,
 				DefaultFunc: schema.EnvDefaultFunc("ANYPOINT_PASSWORD", nil),
 			},
@@ -62,15 +61,6 @@ func providerConfigure(rd *schema.ResourceData) (interface{}, error) {
 	password := rd.Get("password").(string)
 	insecure := rd.Get("insecure").(bool)
 
-	anypointClient, err := sdk.NewAnypointClient(hostname, username, password, insecure)
+	return NewConfig(hostname, username, password, insecure)
 
-	if err != nil {
-		return nil, fmt.Errorf("Error while creating an instance of AnypointClient : %s", err)
-	}
-
-	config := Config{
-		AnypointClient: anypointClient,
-	}
-
-	return &config, nil
 }

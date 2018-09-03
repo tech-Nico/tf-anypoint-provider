@@ -1,3 +1,3 @@
 resource "anypoint_business_group" "Org1" {
-  name = "org2"
+  path_to_bg = "org2"
 }

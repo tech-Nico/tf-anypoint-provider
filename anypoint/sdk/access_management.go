@@ -124,7 +124,11 @@ func (auth *Auth) Hierarchy() []byte {
 	return resp
 }
 
-func (auth *Auth) FindBusinessGroup(path string) string {
+/*
+Search for the given business group (specified in the format "Parent\Child\Grand-Nephew") and
+return its ID
+*/
+func (auth *Auth) FindBusinessGroup(path string) (string, error) {
 	currentOrgId := ""
 
 	groups := auth.createBusinessGroupPath(path)
@@ -139,7 +143,7 @@ func (auth *Auth) FindBusinessGroup(path string) string {
 	subOrganizations := data["subOrganizations"].([]interface{})
 
 	if len(groups) == 1 {
-		return data["id"].(string)
+		return data["id"].(string), nil
 	}
 
 	for _, currGroup := range groups {
@@ -155,10 +159,10 @@ func (auth *Auth) FindBusinessGroup(path string) string {
 	}
 
 	if currentOrgId == "" {
-		log.Fatalf("Cannot find business group %s", path)
+		return "", fmt.Errorf("Cannot find business group %s", path)
 	}
 
-	return currentOrgId
+	return currentOrgId, nil
 }
 
 func (auth *Auth) createBusinessGroupPath(businessGroup string) []string {
