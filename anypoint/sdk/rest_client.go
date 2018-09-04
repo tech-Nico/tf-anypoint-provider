@@ -17,7 +17,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/dghubble/sling"
-	"github.com/tech-nico/anypoint-cli/utils"
 	"io"
 	"io/ioutil"
 	"log"
@@ -69,7 +68,7 @@ type RestClient struct {
 
 func NewRestClient(uri string, insecure bool) *RestClient {
 
-	client := &http.Client{}
+	client := http.DefaultClient
 	if insecure {
 		transCfg := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // ignore expired SSL certificates
@@ -120,7 +119,7 @@ func (client *RestClient) AddHeader(key, value string) *RestClient {
 
 func (client *RestClient) GET(path string) ([]byte, error) {
 
-	utils.Debug(func() {
+	Debug(func() {
 		log.Println("REQEST")
 		log.Printf("GET %s", client.URI+path)
 	})
@@ -134,7 +133,7 @@ func (client *RestClient) GET(path string) ([]byte, error) {
 
 	httpErr := validateResponse(res, err, "GET", path)
 	if httpErr != nil {
-		utils.Debug(func() {
+		Debug(func() {
 			fmt.Printf("\nError while performing GET to %q\nError: %s", path, httpErr)
 		})
 		return nil, httpErr
@@ -145,7 +144,7 @@ func (client *RestClient) GET(path string) ([]byte, error) {
 		return nil, fmt.Errorf("Error while reading response for %s : %s ", path, err)
 	}
 
-	utils.Debug(logResponse("GET", res))
+	logResponse("GET", res)
 
 	return body, nil
 }
@@ -153,8 +152,8 @@ func (client *RestClient) GET(path string) ([]byte, error) {
 //PATCH - Perform an HTTP PATCH
 func (client *RestClient) PATCH(body interface{}, path string, cType ContentType, responseObj interface{}) (*http.Response, error) {
 
-	utils.Debug(func() {
-		log.Println("REQEST")
+	Debug(func() {
+		log.Println("REQUEST")
 		log.Printf("PATCH %s%s", client.URI, path)
 	})
 	sling := client.Sling.Patch(path)
@@ -162,7 +161,7 @@ func (client *RestClient) PATCH(body interface{}, path string, cType ContentType
 
 	response, err := sling.ReceiveSuccess(responseObj)
 
-	utils.Debug(logResponse("PATCH", response))
+	logResponse("PATCH", response)
 
 	httpErr := validateResponse(response, err, "POST", path)
 
@@ -171,16 +170,22 @@ func (client *RestClient) PATCH(body interface{}, path string, cType ContentType
 
 //POST - Perform an HTTP POST
 func (client *RestClient) POST(body interface{}, path string, cType ContentType, responseObj interface{}) (*http.Response, error) {
-
+	log.Printf("POST-ing to %s", client.URI+path)
+	log.Printf("ContentType: %s", cType)
 	sling := client.Sling.Post(path)
 
 	sling = setSlingBodyForContentType(cType, sling, body)
 	req, err := sling.Request()
-	utils.Debug(logRequest(req))
+
+	logRequest(req)
 
 	response, err := sling.ReceiveSuccess(responseObj)
-
-	utils.Debug(logResponse("POST", response))
+	if err != nil {
+		log.Printf("Error while executing POST %s : %s", path, err)
+		return nil, err
+	}
+	defer response.Body.Close()
+	logResponse("POST", response)
 
 	httpErr := validateResponse(response, err, "POST", path)
 
@@ -190,9 +195,9 @@ func (client *RestClient) POST(body interface{}, path string, cType ContentType,
 //DELETE - Perform an HTTP DELETE
 func (client *RestClient) DELETE(body interface{}, path string, cType ContentType, responseObj interface{}) (*http.Response, error) {
 
-	utils.Debug(func() {
+	Debug(func() {
 		log.Println("REQEST")
-		log.Printf("POST %s%s", client.URI, path)
+		log.Printf("DELETE %s%s", client.URI, path)
 	})
 
 	sling := client.Sling.Delete(path)
@@ -201,7 +206,7 @@ func (client *RestClient) DELETE(body interface{}, path string, cType ContentTyp
 
 	response, err := sling.ReceiveSuccess(responseObj)
 
-	utils.Debug(logResponse("DELETE", response))
+	logResponse("DELETE", response)
 
 	httpErr := validateResponse(response, err, "DELETE", path)
 
@@ -213,6 +218,7 @@ func setSlingBodyForContentType(cType ContentType, sling *sling.Sling, body inte
 		switch cType {
 		case Application_Json:
 			sling = sling.BodyJSON(body)
+			log.Printf("Set body to application/json")
 		case Application_Form_Urlencoded:
 			sling = sling.BodyForm(body)
 		case Application_OctetStream:
@@ -245,19 +251,18 @@ func validateResponse(response *http.Response, err error, method, path string) e
 	return nil
 }
 
-func logRequest(req *http.Request) func() {
-	return func() {
-		log.Print("REQUEST DUMP")
-		dump, _ := httputil.DumpRequest(req, true)
-		log.Print(dump)
-	}
+func logRequest(req *http.Request) {
+	log.Print("REQUEST DUMP")
+	dump, _ := httputil.DumpRequest(req, true)
+	log.Print(string(dump[:]))
 }
 
-func logResponse(method string, response *http.Response) func() {
-	return func() {
-		log.Printf("RESPONSE")
-		dump, _ := httputil.DumpResponse(response, true)
-		log.Printf("\n %s RESPONSE: %", method, dump)
+func logResponse(method string, response *http.Response) {
+	log.Printf("RESPONSE")
+	dump, err := httputil.DumpResponse(response, true)
+	if err != nil {
+		log.Printf("\n %s RESPONSE: %", method, string(dump[:]))
+	} else {
+		log.Printf("\n %s RESPONSE: Error while reading the response: %s", method, err)
 	}
-
 }

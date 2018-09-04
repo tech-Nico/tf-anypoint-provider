@@ -81,6 +81,7 @@ func login(httpClient *RestClient, pUsername, pPassword string) (string, error) 
 		Username: pUsername,
 		Password: pPassword,
 	}
+	log.Printf("Logging in with %s", body)
 
 	authToken := new(AuthToken)
 

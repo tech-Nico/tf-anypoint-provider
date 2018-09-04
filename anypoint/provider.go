@@ -9,26 +9,28 @@ import (
 func Provider() *schema.Provider {
 	return &schema.Provider{
 		Schema: map[string]*schema.Schema{
-			"hostname": &schema.Schema{
+			"anypoint_url": &schema.Schema{
 				Type:         schema.TypeString,
 				Optional:     true, //Default to anypoint.mulesoft.com
-				DefaultFunc:  schema.EnvDefaultFunc("ANYPOINT_URL", "anypoint.mulesoft.com"),
+				DefaultFunc:  schema.EnvDefaultFunc("ANYPOINT_URL", "https://anypoint.mulesoft.com"),
 				ValidateFunc: validateUrl,
 			},
 			"username": &schema.Schema{
 				Type:        schema.TypeString,
 				Optional:    false,
+				Required:    true,
 				DefaultFunc: schema.EnvDefaultFunc("ANYPOINT_USERNAME", nil),
 			},
 			"password": &schema.Schema{
 				Type:        schema.TypeString,
 				Sensitive:   true,
 				Optional:    false,
+				Required:    true,
 				DefaultFunc: schema.EnvDefaultFunc("ANYPOINT_PASSWORD", nil),
 			},
-			"insecureSSL": &schema.Schema{
+			"insecure_ssl": &schema.Schema{
 				Type:     schema.TypeBool,
-				Optional: false,
+				Optional: true,
 				Default:  false,
 			},
 		},
@@ -56,10 +58,10 @@ func validateUrl(v interface{}, k string) (warnings []string, errors []error) {
 
 func providerConfigure(rd *schema.ResourceData) (interface{}, error) {
 
-	hostname := rd.Get("hostname").(string)
+	hostname := rd.Get("anypoint_url").(string)
 	username := rd.Get("username").(string)
 	password := rd.Get("password").(string)
-	insecure := rd.Get("insecure").(bool)
+	insecure := rd.Get("insecure_ssl").(bool)
 
 	return NewConfig(hostname, username, password, insecure)
 
