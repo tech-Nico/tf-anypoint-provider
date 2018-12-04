@@ -14,32 +14,8 @@
 package sdk
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
-)
-
-type Auth struct {
-	uri      string
-	insecure bool
-	client   *RestClient
-	Token    string
-}
-
-type LoginPayload struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type AuthToken struct {
-	BearerToken string `json:"access_token,omitempty"`
-}
-
-const (
-	LOGIN     string = "/accounts/login"
-	ME        string = "/accounts/api/me"
-	HIERARCHY string = "/accounts/api/organizations/{orgId}/hierarchy"
 )
 
 func NewAuthWithCredentials(uri, username, password string, insecure bool) (*Auth, error) {
@@ -85,88 +61,132 @@ func login(httpClient *RestClient, pUsername, pPassword string) (string, error) 
 
 	authToken := new(AuthToken)
 
-	_, err := httpClient.POST(body, LOGIN, Application_Json, &authToken)
+	err := httpClient.POST(&body, LOGIN, &authToken)
 
 	if err != nil {
 		return "", fmt.Errorf("Error during login with user %q : %s", pUsername, err)
 	}
 
-	log.Print("Been able to login: ", *authToken)
+	log.Printf("Been able to login. Auth Token:  %v", (*authToken).BearerToken)
 	return authToken.BearerToken, nil
 }
 
-func (auth *Auth) Me() []byte {
+func (auth *Auth) Me() interface{} {
 	log.Printf("Call to %s", ME)
-	resp, err := auth.client.GET(ME)
+	var res interface{}
+	err := auth.client.GET(ME, &res)
 
 	if err != nil {
 		log.Fatalf("Error while retrieving user details: %s", err)
 	}
 
-	return resp
+	return res
 }
 
-func (auth *Auth) Hierarchy() []byte {
+func (auth *Auth) Hierarchy() BusinessGroup {
 	me := auth.Me()
-	var data map[string]interface{}
-	if err := json.Unmarshal(me, &data); err != nil {
-		log.Fatalf("Invalid JSON response when retrieving user details: %s", err)
-	}
+	data := me.(map[string]interface{})
 
 	orgId := data["user"].(map[string]interface{})["organization"].(map[string]interface{})["id"].(string)
-	path := strings.Replace(HIERARCHY, "{orgId}", orgId, -1)
+	path := hierarchyPath(orgId)
 
-	resp, err := auth.client.GET(path)
+	var res = BusinessGroup{}
+	err := auth.client.GET(path, &res)
 
 	if err != nil {
 		log.Fatalf("HTTP error while retrieving user details: %s", err)
 	}
 
-	return resp
+	return res
 }
 
-/*
-Search for the given business group (specified in the format "Parent\Child\Grand-Nephew") and
-return its ID
-*/
+
+
+func (auth *Auth) GetBusinessGroupHierarchy(bgID string) (BusinessGroup, error) {
+	path := hierarchyPath(bgID)
+	var res BusinessGroup
+
+	err := auth.client.GET(path, &res)
+
+	if err != nil {
+		return BusinessGroup{}, fmt.Errorf("HTTP error while retrieving user details: %s", err)
+	}
+
+	return res, nil
+}
+
+func (auth *Auth) GetBusinessGroupByID(bgID string) (BusinessGroup, error) {
+	path := organizationPath(bgID)
+	var res BusinessGroup
+
+	err := auth.client.GET(path, &res)
+
+	if err != nil {
+		return BusinessGroup{}, fmt.Errorf("HTTP error while retrieving user details: %s", err)
+	}
+
+	return res, nil
+}
+
+func (auth *Auth) GetBusinessGroup(parentID, bgName string) (BusinessGroup, error) {
+
+	bgStructure, err := auth.GetBusinessGroupHierarchy(parentID)
+
+	if err != nil {
+		return BusinessGroup{}, fmt.Errorf("error while retrieving hierarchi for business group with ID %s. Error : %s", parentID, err)
+	}
+
+	if bgStructure.SubOrganizations == nil || len(bgStructure.SubOrganizations) <= 0 {
+		return BusinessGroup{}, nil
+	}
+
+	for _, subOrg := range bgStructure.SubOrganizations {
+		if subOrg.Name == bgName {
+			return subOrg, nil
+		}
+	}
+
+	return BusinessGroup{}, nil
+
+}
+
+
+// FindBusinessGroup search for the given business group (specified in the format "Parent\Child\Grand-Nephew") and
+//return its ID
+
 func (auth *Auth) FindBusinessGroup(path string) (string, error) {
 	currentOrgId := ""
 
-	groups := auth.createBusinessGroupPath(path)
+	groups := auth.CreateBusinessGroupPath(path)
 
-	var data map[string]interface{}
 	hierarchy := auth.Hierarchy()
 
-	if err := json.Unmarshal(hierarchy, &data); err != nil {
-		log.Fatalf("Error while querying for hierarchy : %s", err)
-	}
-
-	subOrganizations := data["subOrganizations"].([]interface{})
+	subOrganizations := hierarchy.SubOrganizations
 
 	if len(groups) == 1 {
-		return data["id"].(string), nil
+		return hierarchy.ID, nil
 	}
 
 	for _, currGroup := range groups {
 		for organization := 0; organization < len(subOrganizations); organization++ {
-			jsonObject := subOrganizations[organization].(map[string]interface{})
+			currOrg := subOrganizations[organization]
 
-			if jsonObject["name"].(string) == currGroup {
-				currentOrgId = jsonObject["id"].(string)
-				log.Printf("The matched org name is: %s", jsonObject["name"].(string))
-				subOrganizations = jsonObject["subOrganizations"].([]interface{})
+			if currOrg.Name == currGroup {
+				currentOrgId = currOrg.ID
+				log.Printf("The matched org name is: %s", currOrg.Name)
+				subOrganizations = currOrg.SubOrganizations
 			}
 		}
 	}
 
 	if currentOrgId == "" {
-		return "", fmt.Errorf("Cannot find business group %s", path)
+		return "", fmt.Errorf("cannot find business group %s", path)
 	}
 
 	return currentOrgId, nil
 }
 
-func (auth *Auth) createBusinessGroupPath(businessGroup string) []string {
+func (auth *Auth) CreateBusinessGroupPath(businessGroup string) []string {
 	if businessGroup == "" {
 		return make([]string, 0)
 	}
@@ -176,10 +196,10 @@ func (auth *Auth) createBusinessGroupPath(businessGroup string) []string {
 	pos := 0
 	for ; pos < len(businessGroup)-1; pos++ {
 		currChar := businessGroup[pos]
-		if currChar == '\\' {
+		if currChar == '/' {
 			// Double backslash maps to business group with one backslash
-			if businessGroup[pos+1] == '\\' {
-				group += "\\"
+			if businessGroup[pos+1] == '/' {
+				group += "/"
 				pos++
 				// Single backslash starts a new business group
 			} else {
@@ -198,4 +218,75 @@ func (auth *Auth) createBusinessGroupPath(businessGroup string) []string {
 	groups = append(groups, string(group))
 
 	return groups
+}
+
+func (auth *Auth) FindUserByUsername(orgId, username string) (*User, error) {
+
+	params := make(map[string]string)
+	params["limit"] = "20"
+	params["offset"] = "0"
+	params["search"] = username
+
+	var response Users
+	err := auth.client.GETWithParams(searchUserPath(orgId), params, &response)
+
+	if err != nil {
+		return nil, fmt.Errorf("error while searching for user with username %s : %s", username, err)
+	}
+	if response.Total > 1 {
+		return nil, fmt.Errorf("%d results returned while searching for user %s", response.Total, username)
+	}
+
+	return &response.Data[0], nil
+}
+
+func (auth *Auth) UpdateBusinessGroup() {
+
+}
+
+//Create a new business group under the given business group ID. Returns the newly created business group ID
+func (auth *Auth) CreateBusinessGroup(ownerUsername, parentBGID, newBGName string, entitlements Entitlements) (BusinessGroup, error) {
+
+	user, err := auth.FindUserByUsername(parentBGID, ownerUsername)
+
+	if err != nil {
+		return BusinessGroup{}, fmt.Errorf("error when searching for owner [%s] of new bg [%s] to be created: %s", ownerUsername, newBGName, err)
+	}
+
+	//Find the business group to check it doesn't exist already. If so we need to update instead.
+	newBG, err := auth.GetBusinessGroup(parentBGID, newBGName)
+
+	if err != nil {
+		return BusinessGroup{}, fmt.Errorf("error while creating business group %s : %s", newBGName, err)
+	}
+
+	var response BusinessGroup
+
+	if newBG.ID == "" {
+
+		newBG = BusinessGroup{
+			Name:         newBGName,
+			OwnerId:      user.ID,
+			Entitlements: entitlements,
+			ParentOrgId:  parentBGID,
+		}
+		log.Printf("Creating new business group [%s]", newBGName)
+
+		err = auth.client.POST(newBG, "/accounts/api/organizations", &response)
+
+	} else {
+		newBG.Name = newBGName
+		newBG.OwnerId = user.ID
+		newBG.Entitlements = entitlements
+		newBG.ParentOrgId = parentBGID
+
+		log.Printf("Updating BG %s [%s]", newBG.Name, newBG.ID)
+		err = auth.client.PUT(newBG, "/accounts/api/organizations/"+newBG.ID, &response)
+	}
+
+	if err != nil {
+		return BusinessGroup{}, fmt.Errorf("Error while creating/updating business group %s : %s", newBGName, err)
+	}
+
+	return newBG, nil
 }

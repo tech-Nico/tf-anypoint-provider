@@ -15,13 +15,13 @@ package sdk
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
-	"github.com/dghubble/sling"
-	"io"
-	"io/ioutil"
+	"github.com/go-resty/resty"
 	"log"
 	"net/http"
 	"net/http/httputil"
+	"strings"
 )
 
 type HttpError struct {
@@ -61,9 +61,8 @@ func NewHttpError(code int, theMsg string) error {
 }
 
 type RestClient struct {
-	URI    string
-	Sling  *sling.Sling
-	client *http.Client
+	URI   string
+	resty *resty.Client
 }
 
 func NewRestClient(uri string, insecure bool) *RestClient {
@@ -77,157 +76,167 @@ func NewRestClient(uri string, insecure bool) *RestClient {
 		client.Transport = transCfg
 	}
 
-	s := sling.New().
-		Client(client).
-		Base(uri)
+	r := resty.NewWithClient(client)
+	r.HostURL = uri
 
 	return &RestClient{
 		uri,
-		s,
-		client,
+		r,
 	}
 }
 
-func (client *RestClient) AddAuthHeader(token string) *RestClient {
-	if headers["Authorization"] == "" {
-		client.Sling.Add("Authorization", "Bearer "+token)
+func (restClient *RestClient) AddAuthHeader(token string) *RestClient {
+	/*if headers["Authorization"] == "" {
+		//restClient.resty.SetAuthToken(token)
+		restClient.resty.SetHeader("Authorization", "bearer "+token)
+		restClient.resty.SetHeader("x-anypoint-session-extend", "true")
+
 		headers["Authorization"] = token
 	}
-	return client
+	*/
+	restClient.resty.SetAuthToken(token)
+	return restClient
 }
 
-func (client *RestClient) AddOrgHeader(orgId string) *RestClient {
+func (restClient *RestClient) AddOrgHeader(orgId string) *RestClient {
 	if headers["X-ANYPNT-ORG-ID"] == "" {
-		client.Sling.Add("X-ANYPNT-ORG-ID", orgId)
+		restClient.resty.SetHeader("X-ANYPNT-ORG-ID", orgId)
 		headers["X-ANYPNT-ORG-ID"] = orgId
 	}
-	return client
+	return restClient
 }
 
-func (client *RestClient) AddEnvHeader(envId string) *RestClient {
+func (restClient *RestClient) AddEnvHeader(envId string) *RestClient {
 	if headers["X-ANYPNT-ENV-ID"] == "" {
-		client.Sling.Add("X-ANYPNT-ENV-ID", envId)
+		restClient.resty.SetHeader("X-ANYPNT-ENV-ID", envId)
 		headers["X-ANYPNT-ENV-ID"] = envId
 	}
-	return client
+	return restClient
 }
 
-func (client *RestClient) AddHeader(key, value string) *RestClient {
-	client.Sling.Add(key, value)
-	return client
+func (restClient *RestClient) AddHeader(key, value string) *RestClient {
+	restClient.resty.SetHeader(key, value)
+	return restClient
 }
 
-func (client *RestClient) GET(path string) ([]byte, error) {
+//params should be struct that will be encoded into URL parametrers. Example fron https://godoc.org/github.com/google/go-querystring/query:
+//
+// type Options struct {
+//	Query   string `url:"q"`
+//	ShowAll bool   `url:"all"`
+//	Page    int    `url:"page"`
+// }
+//
+// opt := Options{ "foo", true, 2 }
+// v, _ := query.Values(opt)
+// fmt.Print(v.Encode()) // will output: "q=foo&all=true&page=2"
+func (restClient *RestClient) GETWithParams(path string, params map[string]string, responseObj interface{}) error {
 
 	Debug(func() {
-		log.Println("REQEST")
-		log.Printf("GET %s", client.URI+path)
+		log.Println("REQUEST")
+		log.Printf("GET %s", restClient.URI+path)
 	})
-	req, err := client.Sling.Get(path).Request()
-	if err != nil {
-		fmt.Printf("\nError building GET request for path %s : %s\n", path, err)
-		return nil, err
-	}
-	res, err := client.client.Do(req)
-	defer res.Body.Close()
 
-	httpErr := validateResponse(res, err, "GET", path)
+	res, err := restClient.resty.R().SetQueryParams(params).SetResult(&responseObj).Get(path)
+
+	if err != nil {
+		fmt.Printf("\nError while performing a GET %s : %s\n", path, err)
+		return err
+	}
+
+	httpErr := validateResponse(res.RawResponse, err, "GET", path)
 	if httpErr != nil {
 		Debug(func() {
 			fmt.Printf("\nError while performing GET to %q\nError: %s", path, httpErr)
 		})
-		return nil, httpErr
+		return httpErr
 	}
 
-	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("Error while reading response for %s : %s ", path, err)
+		return fmt.Errorf("Error while reading response for %s : %s ", path, err)
 	}
 
-	logResponse("GET", res)
+	logResponse("GET", res.Body())
 
-	return body, nil
+	return nil
+
+}
+
+//GET a resource (no parameters specified in the URI) and fill teh responseObj with a marshalled
+//JSON Object
+func (restClient *RestClient) GET(path string, responseObj interface{}) error {
+	return restClient.GETWithParams(path, nil, responseObj)
 }
 
 //PATCH - Perform an HTTP PATCH
-func (client *RestClient) PATCH(body interface{}, path string, cType ContentType, responseObj interface{}) (*http.Response, error) {
+func (restClient *RestClient) PATCH(body interface{}, path string, cType ContentType, responseObj interface{}) error {
 
 	Debug(func() {
 		log.Println("REQUEST")
-		log.Printf("PATCH %s%s", client.URI, path)
+		log.Printf("PATCH %s%s", restClient.URI, path)
 	})
-	sling := client.Sling.Patch(path)
-	sling = setSlingBodyForContentType(cType, sling, body)
+	res, err := restClient.resty.R().SetBody(body).SetResult(responseObj).Patch(path)
 
-	response, err := sling.ReceiveSuccess(responseObj)
+	logResponse("PATCH", res.Body())
 
-	logResponse("PATCH", response)
+	httpErr := validateResponse(res.RawResponse, err, "POST", path)
 
-	httpErr := validateResponse(response, err, "POST", path)
-
-	return response, httpErr
+	return httpErr
 }
 
 //POST - Perform an HTTP POST
-func (client *RestClient) POST(body interface{}, path string, cType ContentType, responseObj interface{}) (*http.Response, error) {
-	log.Printf("POST-ing to %s", client.URI+path)
-	log.Printf("ContentType: %s", cType)
-	sling := client.Sling.Post(path)
+func (restClient *RestClient) POST(body interface{}, path string, responseObj interface{}) error {
+	log.Printf("POST-ing to %s", restClient.URI+path)
 
-	sling = setSlingBodyForContentType(cType, sling, body)
-	req, err := sling.Request()
+	res, err := restClient.resty.R().SetBody(body).SetResult(responseObj).Post(path)
 
-	logRequest(req)
+	logRequest(*res.Request)
 
-	response, err := sling.ReceiveSuccess(responseObj)
 	if err != nil {
 		log.Printf("Error while executing POST %s : %s", path, err)
-		return nil, err
+		return err
 	}
-	defer response.Body.Close()
-	logResponse("POST", response)
+	logResponse("POST", res.Body())
 
-	httpErr := validateResponse(response, err, "POST", path)
+	httpErr := validateResponse(res.RawResponse, err, "POST", path)
 
-	return response, httpErr
+	return httpErr
+}
+
+//PUT - Performs an HTTP PUT
+func (restClient *RestClient) PUT(body interface{}, path string, responseObj interface{}) error {
+	log.Printf("PUT-ing to %s", restClient.URI+path)
+
+	res, err := restClient.resty.R().SetBody(body).SetResult(responseObj).Put(path)
+
+	logRequest(*res.Request)
+
+	if err != nil {
+		log.Printf("Error while executing PUT %s : %s", path, err)
+		return err
+	}
+	logResponse("Put", res.Body())
+
+	httpErr := validateResponse(res.RawResponse, err, "PUT", path)
+
+	return httpErr
 }
 
 //DELETE - Perform an HTTP DELETE
-func (client *RestClient) DELETE(body interface{}, path string, cType ContentType, responseObj interface{}) (*http.Response, error) {
+func (restClient *RestClient) DELETE(body interface{}, path string, cType ContentType, responseObj interface{}) error {
 
 	Debug(func() {
 		log.Println("REQEST")
-		log.Printf("DELETE %s%s", client.URI, path)
+		log.Printf("DELETE %s%s", restClient.URI, path)
 	})
 
-	sling := client.Sling.Delete(path)
+	res, err := restClient.resty.R().SetBody(body).SetResult(responseObj).Delete(path)
 
-	sling = setSlingBodyForContentType(cType, sling, body)
+	logResponse("DELETE", res.Body())
 
-	response, err := sling.ReceiveSuccess(responseObj)
+	httpErr := validateResponse(res.RawResponse, err, "DELETE", path)
 
-	logResponse("DELETE", response)
-
-	httpErr := validateResponse(response, err, "DELETE", path)
-
-	return response, httpErr
-}
-
-func setSlingBodyForContentType(cType ContentType, sling *sling.Sling, body interface{}) *sling.Sling {
-	if body != nil {
-		switch cType {
-		case Application_Json:
-			sling = sling.BodyJSON(body)
-			log.Printf("Set body to application/json")
-		case Application_Form_Urlencoded:
-			sling = sling.BodyForm(body)
-		case Application_OctetStream:
-			sling = sling.Body(body.(io.Reader))
-		default:
-			sling = sling.Body(body.(io.Reader))
-		}
-	}
-	return sling
+	return httpErr
 }
 
 func validateResponse(response *http.Response, err error, method, path string) error {
@@ -237,7 +246,7 @@ func validateResponse(response *http.Response, err error, method, path string) e
 	}
 
 	if response.StatusCode == 401 {
-		return NewHttpError(401, "Auth token expired. Please login again")
+		return NewHttpError(401, "Missing auth token or auth token expired. Please login again.")
 	}
 
 	if response.StatusCode == 404 {
@@ -251,18 +260,30 @@ func validateResponse(response *http.Response, err error, method, path string) e
 	return nil
 }
 
-func logRequest(req *http.Request) {
+func logRequest(req resty.Request) {
 	log.Print("REQUEST DUMP")
-	dump, _ := httputil.DumpRequest(req, true)
+	dump, err := httputil.DumpRequest(req.RawRequest, true)
+	if err != nil {
+		log.Printf("Error while dumping the request.. %s", err)
+	}
+
+	if strings.Contains(req.Header.Get("Content-Type"), "application/json") ||
+		strings.Contains(req.Header.Get("Content-Type"), "text/json") {
+		reqBody, err := json.Marshal(req.Body)
+		if err != nil {
+			log.Printf("Error while marshalling request body: %s", err)
+		} else {
+			log.Print(string(reqBody[:]))
+		}
+	}
 	log.Print(string(dump[:]))
+
+	if req.Body != nil {
+		log.Print(req.Body)
+	}
 }
 
-func logResponse(method string, response *http.Response) {
+func logResponse(method string, response []byte) {
 	log.Printf("RESPONSE")
-	dump, err := httputil.DumpResponse(response, true)
-	if err != nil {
-		log.Printf("\n %s RESPONSE: %", method, string(dump[:]))
-	} else {
-		log.Printf("\n %s RESPONSE: Error while reading the response: %s", method, err)
-	}
+	log.Printf("%s", response)
 }

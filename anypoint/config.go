@@ -6,6 +6,7 @@ import (
 )
 
 type Config struct {
+	Username       string
 	AnypointClient *sdk.AnypointClient
 }
 
@@ -18,6 +19,7 @@ func NewConfig(hostname, username, password string, insecureSSL bool) (*Config, 
 	}
 
 	config := &Config{
+		Username:       username,
 		AnypointClient: anypointClient,
 	}
 

@@ -1,6 +1,8 @@
 package sdk
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type AnypointClient struct {
 	Auth *Auth
