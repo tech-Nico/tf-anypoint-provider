@@ -33,10 +33,15 @@ func Provider() *schema.Provider {
 				Optional: true,
 				Default:  false,
 			},
+			"http_debug_log": &schema.Schema{
+				Type:     schema.TypeBool,
+				Optional: true,
+				Default:  false,
+			},
 		},
 		ConfigureFunc: providerConfigure,
 		ResourcesMap: map[string]*schema.Resource{
-			"anypoint_business_group": resourceBusinessGroup(),
+			"ap_bg": resourceBusinessGroup(),
 		},
 	}
 }
@@ -62,7 +67,8 @@ func providerConfigure(rd *schema.ResourceData) (interface{}, error) {
 	username := rd.Get("username").(string)
 	password := rd.Get("password").(string)
 	insecure := rd.Get("insecure_ssl").(bool)
+	httpWire := rd.Get("http_debug_log").(bool)
 
-	return NewConfig(hostname, username, password, insecure)
+	return NewConfig(hostname, username, password, insecure, httpWire)
 
 }

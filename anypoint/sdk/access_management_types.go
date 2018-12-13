@@ -1,6 +1,6 @@
 package sdk
 
-type Auth struct {
+type AccessManagement struct {
 	uri      string
 	insecure bool
 	client   *RestClient

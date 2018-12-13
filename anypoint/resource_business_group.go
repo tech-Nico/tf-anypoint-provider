@@ -1,6 +1,7 @@
 package anypoint
 
 import (
+	"errors"
 	"fmt"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/tech-nico/terraform-provider-anypoint/anypoint/sdk"
@@ -14,7 +15,7 @@ func resourceBusinessGroup() *schema.Resource {
 		Read:   resourceBGRead,
 		Update: resourceBGUpdate,
 		Delete: resourceBGDelete,
-		//Exists: resourceBGExists,
+		Exists: resourceBGExists,
 
 		Schema: map[string]*schema.Schema{
 			"name": &schema.Schema{
@@ -25,12 +26,12 @@ func resourceBusinessGroup() *schema.Resource {
 			"parent_path": &schema.Schema{
 				Type:        schema.TypeString,
 				Description: "The path to parent. Example: Company\\Retail\\APIs",
-				Optional: true,
+				Optional:    true,
 			},
 			"parent_org_id": &schema.Schema{
 				Type:        schema.TypeString,
 				Description: "The ID of the parent org",
-				Optional: true,
+				Optional:    true,
 			},
 			"owner_username": &schema.Schema{
 				Type:        schema.TypeString,
@@ -41,12 +42,12 @@ func resourceBusinessGroup() *schema.Resource {
 			"can_create_sub_orgs": &schema.Schema{
 				Type:        schema.TypeBool,
 				Description: "Whether or not the owner of the new org can create sub organizations",
-				Optional: true,
+				Optional:    true,
 			},
 			"can_create_environments": &schema.Schema{
 				Type:        schema.TypeBool,
 				Description: "Whether the org owner can create environments",
-				Optional: true,
+				Optional:    true,
 			},
 			"production_vcores": &schema.Schema{
 				Type:     schema.TypeFloat,
@@ -80,14 +81,13 @@ func resourceBusinessGroup() *schema.Resource {
 	}
 }
 
-
 func resourceBGCreate(d *schema.ResourceData, conf interface{}) error {
 	newBgName := d.Get("name").(string)
 	parentPath := d.Get("parent_path").(string)
 	theConf := conf.(*Config)
 	client := theConf.AnypointClient
 
-	parentId, err := client.Auth.FindBusinessGroup(parentPath)
+	parentId, err := client.AccessManagement.FindBusinessGroup(parentPath)
 	if err != nil {
 		return err
 	}
@@ -100,12 +100,12 @@ func resourceBGCreate(d *schema.ResourceData, conf interface{}) error {
 		ownerUsername = val.(string)
 	}
 
-	ownerUser, err := client.Auth.FindUserByUsername(parentId, ownerUsername)
+	ownerUser, err := client.AccessManagement.FindUserByUsername(parentId, ownerUsername)
 	if err != nil {
 		return err
 	}
 
-	newBG, err := client.Auth.CreateBusinessGroup(ownerUser.Username, parentId, newBgName, ents)
+	newBG, err := client.AccessManagement.CreateBusinessGroup(ownerUser.Username, parentId, newBgName, ents)
 
 	if err != nil {
 		return err
@@ -119,7 +119,8 @@ func resourceBGCreate(d *schema.ResourceData, conf interface{}) error {
 func resourceBGRead(d *schema.ResourceData, conf interface{}) error {
 	apClient := conf.(*Config).AnypointClient
 	path := d.Get("parent_path").(string)
-	bgID, err := apClient.Auth.FindBusinessGroup(path)
+	bgName := d.Get("name")
+	bgID, err := apClient.AccessManagement.FindBusinessGroup(fmt.Sprintf("%s/%s", path, bgName))
 
 	if err != nil {
 		log.Printf("Error while searching for business group %s: %s", path, err)
@@ -127,7 +128,7 @@ func resourceBGRead(d *schema.ResourceData, conf interface{}) error {
 	}
 
 	if bgID == "" {
-		groups := apClient.Auth.CreateBusinessGroupPath(path)
+		groups := apClient.AccessManagement.CreateBusinessGroupPath(path)
 		if len(groups) > 1 {
 			path := ""
 			for idx, elem := range groups {
@@ -138,7 +139,7 @@ func resourceBGRead(d *schema.ResourceData, conf interface{}) error {
 					break
 				}
 			}
-			if id, err := apClient.Auth.FindBusinessGroup(path); id == "" && err != nil {
+			if id, err := apClient.AccessManagement.FindBusinessGroup(path); id == "" && err != nil {
 				return fmt.Errorf("Parent business group [%s] does not exits", path)
 			}
 		}
@@ -193,21 +194,36 @@ func getEntitlementsFromData(data *schema.ResourceData) sdk.Entitlements {
 }
 
 func resourceBGDelete(d *schema.ResourceData, conf interface{}) error {
-	//apClient := conf.(*Config).AnypointClient
+	apClient := conf.(*Config).AnypointClient
 
-	return nil
+	if bgID := d.Id(); bgID != "" {
+
+		bg, err := apClient.AccessManagement.GetBusinessGroupByID(bgID)
+
+		if err != nil {
+			return fmt.Errorf("error deleting business group. Unable to find business group with id '%s' : %s", bgID, err)
+		}
+
+		if err = apClient.AccessManagement.DeleteBusinessGroup(bg.ID); err != nil {
+			return fmt.Errorf("error while deleting business group with id '%s' : %s", bgID, err)
+		}
+
+		return nil
+	}
+
+	return errors.New("error in resourceBGDelete. Resource ID not set")
 }
 
 func resourceBGUpdate(d *schema.ResourceData, conf interface{}) error {
 	//apClient := conf.(*Config).AnypointClient
 
-	return nil
+	return errors.New("must implement resourceBGUpdate")
 }
 
 func resourceBGExists(d *schema.ResourceData, conf interface{}) (bool, error) {
 	apClient := conf.(*Config).AnypointClient
 	bgID := d.Id()
-	org, err := apClient.Auth.GetBusinessGroupHierarchy(bgID)
+	org, err := apClient.AccessManagement.GetBusinessGroupHierarchy(bgID)
 
 	if err != nil {
 		return false, err

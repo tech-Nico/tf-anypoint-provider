@@ -10,9 +10,9 @@ type Config struct {
 	AnypointClient *sdk.AnypointClient
 }
 
-func NewConfig(hostname, username, password string, insecureSSL bool) (*Config, error) {
+func NewConfig(hostname, username, password string, insecureSSL, httpWireLog bool) (*Config, error) {
 
-	anypointClient, err := sdk.NewAnypointClient(hostname, username, password, insecureSSL)
+	anypointClient, err := sdk.NewAnypointClient(hostname, username, password, insecureSSL, httpWireLog)
 
 	if err != nil {
 		return nil, fmt.Errorf("Error while creating an instance of AnypointClient : %s", err)

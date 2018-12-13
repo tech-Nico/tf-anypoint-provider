@@ -6,8 +6,8 @@ import (
 )
 
 func TestLogin(t *testing.T) {
-	username, password := getCredentials()
-	auth, err := NewAuthWithCredentials("https://anypoint.mulesoft.com", username, password, true)
+	username, password := getCredentials(t)
+	auth, err := NewAuthWithCredentials("https://anypoint.mulesoft.com", username, password, true, true)
 
 	if err != nil {
 		t.Errorf("Error while logging in into Anypoint: %s", err)
@@ -35,7 +35,7 @@ func TestAuth_FindBusinessGroup(t *testing.T) {
 }
 
 func TestAuth_CreateBusinessGroup_StepByStep(t *testing.T) {
-	username, _ := getCredentials()
+	username, _ := getCredentials(t)
 	auth := getAuth(t)
 	parentBgPath := "RootOrg"
 	newBGName := "TestAuth_CreateBusinessGroup_StepByStep"
@@ -56,8 +56,8 @@ func TestAuth_CreateBusinessGroup_StepByStep(t *testing.T) {
 }
 
 func TestAuth_CreateBusinessGroup(t *testing.T) {
-	username, password := getCredentials()
-	anypoint, err :=  NewAnypointClient("https://anypoint.mulesoft.com", username, password, true)
+	username, password := getCredentials(t)
+	anypoint, err := NewAnypointClient("https://anypoint.mulesoft.com", username, password, true, true)
 
 	if err != nil {
 		t.Fatalf("Error creating a new instance of AnypointClient: %s", err)
@@ -82,9 +82,8 @@ func TestAuth_CreateBusinessGroup(t *testing.T) {
 	t.Logf("Successful in creating BG [%s\\%s]: new BG id is [%s]", parentBgPath, newBGName, newBG.ID)
 }
 
-
 func TestAuth_FindUserByUsername(t *testing.T) {
-	username, _ := getCredentials()
+	username, _ := getCredentials(t)
 	auth := getAuth(t)
 	orgId, err := auth.FindBusinessGroup("RootOrg")
 	if err != nil {
@@ -114,8 +113,8 @@ func getCredentials(t *testing.T) (string, string) {
 }
 
 func getAuth(t *testing.T) *Auth {
-	username, password := getCredentials()
-	auth, err := NewAuthWithCredentials("https://anypoint.mulesoft.com", username, password, true)
+	username, password := getCredentials(t)
+	auth, err := NewAuthWithCredentials("https://anypoint.mulesoft.com", username, password, true, true)
 
 	if err != nil {
 		t.Errorf("Error while logging in into Anypoint: %s", err)

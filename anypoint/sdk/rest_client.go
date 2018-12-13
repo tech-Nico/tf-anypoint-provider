@@ -15,13 +15,10 @@ package sdk
 
 import (
 	"crypto/tls"
-	"encoding/json"
 	"fmt"
 	"github.com/go-resty/resty"
 	"log"
 	"net/http"
-	"net/http/httputil"
-	"strings"
 )
 
 type HttpError struct {
@@ -65,7 +62,7 @@ type RestClient struct {
 	resty *resty.Client
 }
 
-func NewRestClient(uri string, insecure bool) *RestClient {
+func NewRestClient(uri string, insecure, debugMode bool) *RestClient {
 
 	client := http.DefaultClient
 	if insecure {
@@ -77,6 +74,7 @@ func NewRestClient(uri string, insecure bool) *RestClient {
 	}
 
 	r := resty.NewWithClient(client)
+	r.SetDebug(debugMode)
 	r.HostURL = uri
 
 	return &RestClient{
@@ -132,11 +130,6 @@ func (restClient *RestClient) AddHeader(key, value string) *RestClient {
 // fmt.Print(v.Encode()) // will output: "q=foo&all=true&page=2"
 func (restClient *RestClient) GETWithParams(path string, params map[string]string, responseObj interface{}) error {
 
-	Debug(func() {
-		log.Println("REQUEST")
-		log.Printf("GET %s", restClient.URI+path)
-	})
-
 	res, err := restClient.resty.R().SetQueryParams(params).SetResult(&responseObj).Get(path)
 
 	if err != nil {
@@ -146,17 +139,12 @@ func (restClient *RestClient) GETWithParams(path string, params map[string]strin
 
 	httpErr := validateResponse(res.RawResponse, err, "GET", path)
 	if httpErr != nil {
-		Debug(func() {
-			fmt.Printf("\nError while performing GET to %q\nError: %s", path, httpErr)
-		})
 		return httpErr
 	}
 
 	if err != nil {
 		return fmt.Errorf("Error while reading response for %s : %s ", path, err)
 	}
-
-	logResponse("GET", res.Body())
 
 	return nil
 
@@ -171,13 +159,7 @@ func (restClient *RestClient) GET(path string, responseObj interface{}) error {
 //PATCH - Perform an HTTP PATCH
 func (restClient *RestClient) PATCH(body interface{}, path string, cType ContentType, responseObj interface{}) error {
 
-	Debug(func() {
-		log.Println("REQUEST")
-		log.Printf("PATCH %s%s", restClient.URI, path)
-	})
 	res, err := restClient.resty.R().SetBody(body).SetResult(responseObj).Patch(path)
-
-	logResponse("PATCH", res.Body())
 
 	httpErr := validateResponse(res.RawResponse, err, "POST", path)
 
@@ -190,13 +172,10 @@ func (restClient *RestClient) POST(body interface{}, path string, responseObj in
 
 	res, err := restClient.resty.R().SetBody(body).SetResult(responseObj).Post(path)
 
-	logRequest(*res.Request)
-
 	if err != nil {
 		log.Printf("Error while executing POST %s : %s", path, err)
 		return err
 	}
-	logResponse("POST", res.Body())
 
 	httpErr := validateResponse(res.RawResponse, err, "POST", path)
 
@@ -209,13 +188,10 @@ func (restClient *RestClient) PUT(body interface{}, path string, responseObj int
 
 	res, err := restClient.resty.R().SetBody(body).SetResult(responseObj).Put(path)
 
-	logRequest(*res.Request)
-
 	if err != nil {
 		log.Printf("Error while executing PUT %s : %s", path, err)
 		return err
 	}
-	logResponse("Put", res.Body())
 
 	httpErr := validateResponse(res.RawResponse, err, "PUT", path)
 
@@ -223,16 +199,12 @@ func (restClient *RestClient) PUT(body interface{}, path string, responseObj int
 }
 
 //DELETE - Perform an HTTP DELETE
-func (restClient *RestClient) DELETE(body interface{}, path string, cType ContentType, responseObj interface{}) error {
+func (restClient *RestClient) DELETE(body interface{}, path string, responseObj interface{}) error {
 
-	Debug(func() {
-		log.Println("REQEST")
-		log.Printf("DELETE %s%s", restClient.URI, path)
-	})
-
-	res, err := restClient.resty.R().SetBody(body).SetResult(responseObj).Delete(path)
-
-	logResponse("DELETE", res.Body())
+	res, err := restClient.resty.R().
+		SetBody(body).
+		SetResult(responseObj).
+		Delete(path)
 
 	httpErr := validateResponse(res.RawResponse, err, "DELETE", path)
 
@@ -258,32 +230,4 @@ func validateResponse(response *http.Response, err error, method, path string) e
 	}
 
 	return nil
-}
-
-func logRequest(req resty.Request) {
-	log.Print("REQUEST DUMP")
-	dump, err := httputil.DumpRequest(req.RawRequest, true)
-	if err != nil {
-		log.Printf("Error while dumping the request.. %s", err)
-	}
-
-	if strings.Contains(req.Header.Get("Content-Type"), "application/json") ||
-		strings.Contains(req.Header.Get("Content-Type"), "text/json") {
-		reqBody, err := json.Marshal(req.Body)
-		if err != nil {
-			log.Printf("Error while marshalling request body: %s", err)
-		} else {
-			log.Print(string(reqBody[:]))
-		}
-	}
-	log.Print(string(dump[:]))
-
-	if req.Body != nil {
-		log.Print(req.Body)
-	}
-}
-
-func logResponse(method string, response []byte) {
-	log.Printf("RESPONSE")
-	log.Printf("%s", response)
 }

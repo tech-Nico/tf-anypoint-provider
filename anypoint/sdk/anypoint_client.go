@@ -5,13 +5,13 @@ import (
 )
 
 type AnypointClient struct {
-	Auth *Auth
+	AccessManagement *AccessManagement
 }
 
-func NewAnypointClient(uri string, username, password string, insecure bool) (*AnypointClient, error) {
+func NewAnypointClient(uri string, username, password string, insecure, httpWireLog bool) (*AnypointClient, error) {
 	ac := new(AnypointClient)
 	var err error
-	ac.Auth, err = NewAuthWithCredentials(uri, username, password, insecure)
+	ac.AccessManagement, err = NewAuthWithCredentials(uri, username, password, insecure, httpWireLog)
 
 	if err != nil {
 		return nil, fmt.Errorf("Error while creating a new instance of AnypointClient: %s", err)

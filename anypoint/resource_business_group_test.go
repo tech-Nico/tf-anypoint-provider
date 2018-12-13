@@ -6,8 +6,8 @@ import (
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/terraform"
-	"testing"
 	"github.com/tech-nico/terraform-provider-anypoint/anypoint/sdk"
+	"testing"
 )
 
 func TestAccBusinessGroup_create(t *testing.T) {
@@ -26,14 +26,14 @@ func TestAccBusinessGroup_create(t *testing.T) {
 			{
 				Config: testAccBusinessGroupConfig_basic(bgName, parentPath),
 				Check: resource.ComposeTestCheckFunc(
-					testBGExists("anypoint_business_group.test", &bg)),
+					testBGExists("ap_bg.test", &bg)),
 			},
 		},
 	})
 
 }
 func testBGExists(resourceName string, bg *sdk.BusinessGroup) resource.TestCheckFunc {
-	return func(s *terraform.State) error{
+	return func(s *terraform.State) error {
 		ress := s.RootModule().Resources
 		for k, v := range ress {
 			fmt.Println("k: ", k, " - v: ", v)
@@ -47,7 +47,7 @@ func testBGExists(resourceName string, bg *sdk.BusinessGroup) resource.TestCheck
 			return fmt.Errorf("No Business Group ID has been set")
 		}
 
-		auth := testAccProvider.Meta().(*Config).AnypointClient.Auth
+		auth := testAccProvider.Meta().(*Config).AnypointClient.AccessManagement
 
 		bg, err := auth.GetBusinessGroupByID(rs.Primary.ID)
 
@@ -64,21 +64,20 @@ func testBGExists(resourceName string, bg *sdk.BusinessGroup) resource.TestCheck
 }
 
 func testAccCheckBusinessGroupDestroyWithProvider(s *terraform.State, provider *schema.Provider) error {
-	conn := provider.Meta().(*Config).AnypointClient.Auth
+	conn := provider.Meta().(*Config).AnypointClient.AccessManagement
 
 	for _, rs := range s.RootModule().Resources {
-		if rs.Type != "anypoint_business_group" {
+		if rs.Type != "ap_bg" {
 			continue
 		}
 
 		// Try to find the resource
-		bg, err := conn.GetBusinessGroupHierarchy(rs.Primary.ID)
+		bg, err := conn.GetBusinessGroupByID(rs.Primary.ID)
 
-		if err != nil {
-			return err
-		}
+		//We assume that if err != nil it could be because the bG doesn't exist.
+		//Unfortunately the API seems to be returning 401 if the BG does not exist :o|
 
-		if bg.ID != "" {
+		if err == nil && bg.ID != "" {
 			return fmt.Errorf("Found business group with ID %s (name: %s)", rs.Primary.ID, bg.Name)
 		}
 	}
@@ -89,7 +88,11 @@ func testAccCheckBusinessGroupDestroyWithProvider(s *terraform.State, provider *
 func testAccBusinessGroupConfig_basic(bgName, parentPath string) string {
 
 	return fmt.Sprintf(`
-		resource "anypoint_business_group" "test" {
+		provider "ap" {
+			http_debug_log = true
+		}
+
+		resource "ap_bg" "test" {
   			name = "%s"
 			parent_path = "%s"
 		}

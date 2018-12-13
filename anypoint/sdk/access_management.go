@@ -14,19 +14,20 @@
 package sdk
 
 import (
+	"errors"
 	"fmt"
 	"log"
 )
 
-func NewAuthWithCredentials(uri, username, password string, insecure bool) (*Auth, error) {
-	client := NewRestClient(uri, insecure)
+func NewAuthWithCredentials(uri, username, password string, insecure, httpWireLog bool) (*AccessManagement, error) {
+	client := NewRestClient(uri, insecure, httpWireLog)
 	token, err := login(client, username, password)
 	if err != nil {
 		return nil, fmt.Errorf("Error while logging in into Anypoint Platform: %s", err)
 	}
 
 	client.AddAuthHeader(token)
-	return &Auth{
+	return &AccessManagement{
 		uri,
 		insecure,
 		client,
@@ -34,17 +35,17 @@ func NewAuthWithCredentials(uri, username, password string, insecure bool) (*Aut
 	}, nil
 }
 
-func (auth *Auth) GetAuthenticatedHttpClient() *RestClient {
+func (auth *AccessManagement) GetAuthenticatedHttpClient() *RestClient {
 	return auth.client
 }
 
 /**
 Return an HTTP Client which will inject the necessary headers to authenticate calls against ARM
 */
-func (auth *Auth) GetARMAuthenticatedHttpClient(orgId, envId string) *RestClient {
+func (auth *AccessManagement) GetARMAuthenticatedHttpClient(orgId, envId string, httpWireLog bool) *RestClient {
 	//We are not caching here since we could call this function with different orgId and envId in the same execution
-	armClient := NewRestClient(auth.uri, auth.insecure)
-	armClient = NewRestClient(auth.uri, auth.insecure)
+	armClient := NewRestClient(auth.uri, auth.insecure, httpWireLog)
+	armClient = NewRestClient(auth.uri, auth.insecure, httpWireLog)
 	armClient.AddAuthHeader(auth.Token)
 	armClient.AddEnvHeader(envId)
 	armClient.AddOrgHeader(orgId)
@@ -71,7 +72,7 @@ func login(httpClient *RestClient, pUsername, pPassword string) (string, error) 
 	return authToken.BearerToken, nil
 }
 
-func (auth *Auth) Me() interface{} {
+func (auth *AccessManagement) Me() interface{} {
 	log.Printf("Call to %s", ME)
 	var res interface{}
 	err := auth.client.GET(ME, &res)
@@ -83,7 +84,7 @@ func (auth *Auth) Me() interface{} {
 	return res
 }
 
-func (auth *Auth) Hierarchy() BusinessGroup {
+func (auth *AccessManagement) Hierarchy() BusinessGroup {
 	me := auth.Me()
 	data := me.(map[string]interface{})
 
@@ -100,9 +101,7 @@ func (auth *Auth) Hierarchy() BusinessGroup {
 	return res
 }
 
-
-
-func (auth *Auth) GetBusinessGroupHierarchy(bgID string) (BusinessGroup, error) {
+func (auth *AccessManagement) GetBusinessGroupHierarchy(bgID string) (BusinessGroup, error) {
 	path := hierarchyPath(bgID)
 	var res BusinessGroup
 
@@ -115,7 +114,7 @@ func (auth *Auth) GetBusinessGroupHierarchy(bgID string) (BusinessGroup, error) 
 	return res, nil
 }
 
-func (auth *Auth) GetBusinessGroupByID(bgID string) (BusinessGroup, error) {
+func (auth *AccessManagement) GetBusinessGroupByID(bgID string) (BusinessGroup, error) {
 	path := organizationPath(bgID)
 	var res BusinessGroup
 
@@ -128,7 +127,7 @@ func (auth *Auth) GetBusinessGroupByID(bgID string) (BusinessGroup, error) {
 	return res, nil
 }
 
-func (auth *Auth) GetBusinessGroup(parentID, bgName string) (BusinessGroup, error) {
+func (auth *AccessManagement) GetBusinessGroup(parentID, bgName string) (BusinessGroup, error) {
 
 	bgStructure, err := auth.GetBusinessGroupHierarchy(parentID)
 
@@ -150,11 +149,10 @@ func (auth *Auth) GetBusinessGroup(parentID, bgName string) (BusinessGroup, erro
 
 }
 
-
 // FindBusinessGroup search for the given business group (specified in the format "Parent\Child\Grand-Nephew") and
 //return its ID
 
-func (auth *Auth) FindBusinessGroup(path string) (string, error) {
+func (auth *AccessManagement) FindBusinessGroup(path string) (string, error) {
 	currentOrgId := ""
 
 	groups := auth.CreateBusinessGroupPath(path)
@@ -186,7 +184,7 @@ func (auth *Auth) FindBusinessGroup(path string) (string, error) {
 	return currentOrgId, nil
 }
 
-func (auth *Auth) CreateBusinessGroupPath(businessGroup string) []string {
+func (auth *AccessManagement) CreateBusinessGroupPath(businessGroup string) []string {
 	if businessGroup == "" {
 		return make([]string, 0)
 	}
@@ -220,7 +218,7 @@ func (auth *Auth) CreateBusinessGroupPath(businessGroup string) []string {
 	return groups
 }
 
-func (auth *Auth) FindUserByUsername(orgId, username string) (*User, error) {
+func (auth *AccessManagement) FindUserByUsername(orgId, username string) (*User, error) {
 
 	params := make(map[string]string)
 	params["limit"] = "20"
@@ -240,12 +238,12 @@ func (auth *Auth) FindUserByUsername(orgId, username string) (*User, error) {
 	return &response.Data[0], nil
 }
 
-func (auth *Auth) UpdateBusinessGroup() {
+func (auth *AccessManagement) UpdateBusinessGroup() {
 
 }
 
 //Create a new business group under the given business group ID. Returns the newly created business group ID
-func (auth *Auth) CreateBusinessGroup(ownerUsername, parentBGID, newBGName string, entitlements Entitlements) (BusinessGroup, error) {
+func (auth *AccessManagement) CreateBusinessGroup(ownerUsername, parentBGID, newBGName string, entitlements Entitlements) (BusinessGroup, error) {
 
 	user, err := auth.FindUserByUsername(parentBGID, ownerUsername)
 
@@ -288,5 +286,26 @@ func (auth *Auth) CreateBusinessGroup(ownerUsername, parentBGID, newBGName strin
 		return BusinessGroup{}, fmt.Errorf("Error while creating/updating business group %s : %s", newBGName, err)
 	}
 
-	return newBG, nil
+	return response, nil
+}
+
+func (auth *AccessManagement) DeleteBusinessGroup(bgID string) error {
+	if bgID == "" {
+		return errors.New("error when deleting business group. No business group ID has been specified")
+	}
+
+	path := organizationPath(bgID)
+	bg := BusinessGroup{
+		ID: bgID,
+	}
+
+	resp := new(interface{})
+
+	err := auth.client.DELETE(&bg, path, &resp)
+
+	if err != nil {
+		return fmt.Errorf("error while deleting business group with ID %s : %s", bgID, err)
+	}
+
+	return nil
 }

@@ -18,12 +18,12 @@ func init() {
 
 	testAccProvider = Provider()
 	testAccProviders = map[string]terraform.ResourceProvider{
-		"anypoint": testAccProvider,
+		"ap": testAccProvider,
 	}
 
 	testAccProviderFactories = func(providers *[]*schema.Provider) map[string]terraform.ResourceProviderFactory {
 		return map[string]terraform.ResourceProviderFactory{
-			"anypoint": func() (terraform.ResourceProvider, error) {
+			"ap": func() (terraform.ResourceProvider, error) {
 				p := Provider()
 				*providers = append(*providers, p)
 				return p, nil
