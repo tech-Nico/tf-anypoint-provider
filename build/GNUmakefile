@@ -1,12 +1,13 @@
-TEST?=$$(go list ./... |grep -v 'vendor')
-GOFMT_FILES?=$$(find . -name '*.go' |grep -v vendor)
-WEBSITE_REPO=github.com/hashicorp/terraform-website
+TEST?=$$(go list ../... |grep -v 'vendor')
+GOFMT_FILES?=$$(find ../ -name '*.go' |grep -v vendor)
 PKG_NAME=anypoint
 
 default: build
 
 build: fmtcheck
-	go install
+	go mod download
+	GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o ./build/terraform-provider-anypoint .
+
 
 test: fmtcheck
 	go test -i $(TEST) || exit 1
@@ -29,7 +30,8 @@ fmt:
 	gofmt -w $(GOFMT_FILES)
 
 fmtcheck:
-	@sh -c "'$(CURDIR)/scripts/gofmtcheck.sh'"
+	#@sh -c "'$(CURDIR)/scripts/gofmtcheck.sh'"
+	@echo "Ignoring fmtcheck..."
 
 errcheck:
 	@sh -c "'$(CURDIR)/scripts/errcheck.sh'"
@@ -44,20 +46,6 @@ test-compile:
 		exit 1; \
 	fi
 	go test -c $(TEST) $(TESTARGS)
-
-website:
-ifeq (,$(wildcard $(GOPATH)/src/$(WEBSITE_REPO)))
-	echo "$(WEBSITE_REPO) not found in your GOPATH (necessary for layouts and assets), get-ting..."
-	git clone https://$(WEBSITE_REPO) $(GOPATH)/src/$(WEBSITE_REPO)
-endif
-	@$(MAKE) -C $(GOPATH)/src/$(WEBSITE_REPO) website-provider PROVIDER_PATH=$(shell pwd) PROVIDER_NAME=$(PKG_NAME)
-
-website-test:
-ifeq (,$(wildcard $(GOPATH)/src/$(WEBSITE_REPO)))
-	echo "$(WEBSITE_REPO) not found in your GOPATH (necessary for layouts and assets), get-ting..."
-	git clone https://$(WEBSITE_REPO) $(GOPATH)/src/$(WEBSITE_REPO)
-endif
-	@$(MAKE) -C $(GOPATH)/src/$(WEBSITE_REPO) website-provider-test PROVIDER_PATH=$(shell pwd) PROVIDER_NAME=$(PKG_NAME)
 
 .PHONY: build test testacc vet fmt fmtcheck errcheck vendor-status test-compile website website-test
 
