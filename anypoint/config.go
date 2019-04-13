@@ -2,6 +2,7 @@ package anypoint
 
 import (
 	"fmt"
+
 	"github.com/tech-nico/terraform-provider-anypoint/anypoint/sdk"
 )
 

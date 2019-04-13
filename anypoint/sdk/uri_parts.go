@@ -19,7 +19,6 @@ func searchUserPath(orgId string) string {
 	return strings.Replace(SEARCH_USER, "{orgId}", orgId, -1)
 }
 
-
 func organizationPath(orgId string) string {
 	return strings.Replace(ORGANIZATION, "{orgId}", orgId, -1)
 }
