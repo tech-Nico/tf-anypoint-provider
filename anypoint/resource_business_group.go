@@ -3,9 +3,10 @@ package anypoint
 import (
 	"errors"
 	"fmt"
+	"log"
+
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/tech-nico/terraform-provider-anypoint/anypoint/sdk"
-	"log"
 )
 
 func resourceBusinessGroup() *schema.Resource {
@@ -81,6 +82,7 @@ func resourceBusinessGroup() *schema.Resource {
 	}
 }
 
+//resourceBGCreate Create a new business group
 func resourceBGCreate(d *schema.ResourceData, conf interface{}) error {
 	newBgName := d.Get("name").(string)
 	parentPath := d.Get("parent_path").(string)
@@ -113,7 +115,7 @@ func resourceBGCreate(d *schema.ResourceData, conf interface{}) error {
 
 	d.SetId(newBG.ID)
 
-	return nil
+	return resourceBGRead(d, conf)
 }
 
 func resourceBGRead(d *schema.ResourceData, conf interface{}) error {

@@ -2,8 +2,9 @@ package anypoint
 
 import (
 	"fmt"
-	"github.com/hashicorp/terraform/helper/schema"
 	"net/url"
+
+	"github.com/hashicorp/terraform/helper/schema"
 )
 
 func Provider() *schema.Provider {
@@ -41,7 +42,7 @@ func Provider() *schema.Provider {
 		},
 		ConfigureFunc: providerConfigure,
 		ResourcesMap: map[string]*schema.Resource{
-			"ap_bg": resourceBusinessGroup(),
+			"anypoint_bg": resourceBusinessGroup(),
 		},
 	}
 }

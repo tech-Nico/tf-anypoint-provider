@@ -1,4 +1,4 @@
-TEST?=$$(go list ../... |grep -v 'vendor')
+TEST?=$$(go list |grep -v 'vendor')
 GOFMT_FILES?=$$(find ../ -name '*.go' |grep -v vendor)
 PKG_NAME=anypoint
 
@@ -37,7 +37,7 @@ errcheck:
 	@sh -c "'$(CURDIR)/scripts/errcheck.sh'"
 
 vendor-status:
-	@govendor status
+	@go vendor status
 
 test-compile:
 	@if [ "$(TEST)" = "./..." ]; then \

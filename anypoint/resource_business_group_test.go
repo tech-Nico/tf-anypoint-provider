@@ -2,12 +2,13 @@ package anypoint
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/hashicorp/terraform/helper/acctest"
 	"github.com/hashicorp/terraform/helper/resource"
 	"github.com/hashicorp/terraform/helper/schema"
 	"github.com/hashicorp/terraform/terraform"
 	"github.com/tech-nico/terraform-provider-anypoint/anypoint/sdk"
-	"testing"
 )
 
 func TestAccBusinessGroup_create(t *testing.T) {
@@ -88,11 +89,11 @@ func testAccCheckBusinessGroupDestroyWithProvider(s *terraform.State, provider *
 func testAccBusinessGroupConfig_basic(bgName, parentPath string) string {
 
 	return fmt.Sprintf(`
-		provider "ap" {
+		provider "anypoint" {
 			http_debug_log = true
 		}
 
-		resource "ap_bg" "test" {
+		resource "anypoint_bg" " test" {
   			name = "%s"
 			parent_path = "%s"
 		}
